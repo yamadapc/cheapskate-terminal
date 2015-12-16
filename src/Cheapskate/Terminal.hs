@@ -3,35 +3,31 @@ module Cheapskate.Terminal
   where
 
 import           Cheapskate
-import           Control.Monad                (forM_)
+import           Control.Monad                       (forM_)
 import           Data.Monoid
-import qualified Data.Text                    as Text
-import qualified Data.Text.IO                 as Text
+import qualified Data.Text                           as Text
+import qualified Data.Text.IO                        as Text
+import           Language.Haskell.HsColour
+import           Language.Haskell.HsColour.Colourise (readColourPrefs)
 import           System.Console.ANSI
-import           System.Console.Terminal.Size
-
-testDocument = markdown def $ Text.unlines
-    [ "# Hello World"
-    , ""
-    , "Look at me today"
-    ]
+import           System.Console.Terminal.Size        (Window (..), size)
 
 prettyPrint :: Doc -> IO ()
 prettyPrint (Doc _ blocks) = do
     putStrLn ""
-    width <- size >>= \s -> case s of
+    wid <- size >>= \s -> case s of
         Just (Window _ w) -> return w
         Nothing -> return 80
     forM_ blocks $ \block -> do
-        prettyPrintBlock width block
+        prettyPrintBlock wid block
         putStrLn ""
 
 prettyPrintBlock :: Int -> Block -> IO ()
-prettyPrintBlock width (Header level els) = do
+prettyPrintBlock _ (Header level els) = do
     setSGR [ SetColor Foreground Vivid Black
            , SetConsoleIntensity BoldIntensity
            ]
-    putStr (take level (repeat '#'))
+    putStr (replicate level '#')
     putStr " "
     setSGR [ Reset ]
     setSGR [ SetColor Foreground Vivid Cyan
@@ -40,33 +36,33 @@ prettyPrintBlock width (Header level els) = do
     mapM_ prettyPrintInline els
     setSGR [ Reset ]
     putStrLn ""
-prettyPrintBlock width (Para els) = do
+prettyPrintBlock _ (Para els) = do
     mapM_ prettyPrintInline els
     putStrLn ""
-prettyPrintBlock width (List _ (Bullet c) bss) = do
-    forM_ bss $ \bs -> do
-        setSGR [ SetColor Foreground Vivid Black ]
-        putStr ("  " ++ (c:" "))
-        setSGR [ Reset ]
-        mapM_ (prettyPrintBlock width) bs
-prettyPrintBlock width (Blockquote bs) = do
-    forM_ bs $ \b -> do
-        setSGR [ SetColor Foreground Vivid Black ]
-        putStr ("  > ")
-        setSGR [ SetColor Foreground Vivid Blue ]
-        prettyPrintBlock width b
-prettyPrintBlock width (CodeBlock _ t) = do
-    setSGR [ SetColor Foreground Dull Yellow ]
-    forM_ (Text.lines t) $ \l -> do
-        Text.putStrLn ("    " <> l)
-    setSGR [ Reset ]
-prettyPrintBlock width HRule = do
+prettyPrintBlock wid (List _ (Bullet c) bss) = forM_ bss $ \bs -> do
     setSGR [ SetColor Foreground Vivid Black ]
-    putStr (take width (repeat '-'))
+    putStr ("  " ++ (c:" "))
     setSGR [ Reset ]
-prettyPrintBlock width (HtmlBlock html) = do
-    Text.putStrLn html
-prettyPrintBlock width block = print block
+    mapM_ (prettyPrintBlock wid) bs
+prettyPrintBlock wid (Blockquote bs) = forM_ bs $ \b -> do
+    setSGR [ SetColor Foreground Vivid Black ]
+    putStr "  > "
+    setSGR [ SetColor Foreground Vivid Blue ]
+    prettyPrintBlock wid b
+prettyPrintBlock _ (CodeBlock (CodeAttr "haskell" _) t) = do
+    prefs <- readColourPrefs
+    let code = hscolour TTY prefs False True "" False (Text.unpack t)
+    forM_ (lines code) $ \l -> putStrLn ("    " <> l)
+prettyPrintBlock _ (CodeBlock _ t) = do
+    setSGR [ SetColor Foreground Dull Yellow ]
+    forM_ (Text.lines t) $ \l -> Text.putStrLn ("    " <> l)
+    setSGR [ Reset ]
+prettyPrintBlock wid HRule = do
+    setSGR [ SetColor Foreground Vivid Black ]
+    putStr (replicate wid '-')
+    setSGR [ Reset ]
+prettyPrintBlock _ (HtmlBlock html) = Text.putStrLn html
+prettyPrintBlock _ block = print block
 
 prettyPrintInline :: Inline -> IO ()
 prettyPrintInline (Str s) = Text.putStr s
