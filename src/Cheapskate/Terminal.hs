@@ -44,6 +44,14 @@ prettyPrintBlock wid (List _ (Bullet c) bss) = forM_ bss $ \bs -> do
     putStr ("  " ++ (c:" "))
     setSGR [ Reset ]
     mapM_ (prettyPrintBlock wid) bs
+prettyPrintBlock wid (List _ (Numbered w i) bss) = forM_ bss $ \bs -> do
+    setSGR [ SetColor Foreground Vivid Black ]
+    let wc = case w of
+            PeriodFollowing -> '.'
+            ParenFollowing -> ')'
+    putStr ("  " ++ show i ++ (wc : " "))
+    setSGR [ Reset ]
+    mapM_ (prettyPrintBlock wid) bs
 prettyPrintBlock wid (Blockquote bs) = forM_ bs $ \b -> do
     setSGR [ SetColor Foreground Vivid Black ]
     putStr "  > "
