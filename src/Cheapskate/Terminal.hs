@@ -44,14 +44,17 @@ prettyPrintBlock wid (List _ (Bullet c) bss) = forM_ bss $ \bs -> do
     putStr ("  " ++ (c:" "))
     setSGR [ Reset ]
     mapM_ (prettyPrintBlock wid) bs
-prettyPrintBlock wid (List _ (Numbered w i) bss) = forM_ bss $ \bs -> do
-    setSGR [ SetColor Foreground Vivid Black ]
-    let wc = case w of
-            PeriodFollowing -> '.'
-            ParenFollowing -> ')'
-    putStr ("  " ++ show i ++ (wc : " "))
-    setSGR [ Reset ]
-    mapM_ (prettyPrintBlock wid) bs
+prettyPrintBlock wid (List _ (Numbered w i) bss) =
+    forM_ ibss $ \(bs, j) -> do
+        setSGR [ SetColor Foreground Vivid Black ]
+        let wc = case w of
+                PeriodFollowing -> '.'
+                ParenFollowing -> ')'
+        putStr ("  " ++ show (i + j) ++ (wc : " "))
+        setSGR [ Reset ]
+        mapM_ (prettyPrintBlock wid) bs
+  where
+    ibss = zip bss [0..]
 prettyPrintBlock wid (Blockquote bs) = forM_ bs $ \b -> do
     setSGR [ SetColor Foreground Vivid Black ]
     putStr "  > "
@@ -70,7 +73,6 @@ prettyPrintBlock wid HRule = do
     putStr (replicate wid '-')
     setSGR [ Reset ]
 prettyPrintBlock _ (HtmlBlock html) = Text.putStrLn html
-prettyPrintBlock _ block = print block
 
 prettyPrintInline :: Inline -> IO ()
 prettyPrintInline (Str s) = Text.putStr s
