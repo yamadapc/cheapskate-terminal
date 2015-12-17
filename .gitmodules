@@ -1,0 +1,3 @@
+[submodule "hpygments"]
+	path = hpygments
+	url = git@github.com:yamadapc/hpygments

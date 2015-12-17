@@ -1,30 +1,44 @@
-Msee
-===
-
-`msee` is a command-line tool to read `markdown` file.
-And it's a library help your *command-line software* to output readable markdown content.
-
 Examples
----
+--------
 
-### List
+### Lists
 
 * Foo: **strong**
 * Bar: `code`
 * Baz: *emphasis*
 
-### Blockquote
+### Numbered Lists
+
+1. Foo: **strong**
+2. Bar: `code`
+3. Baz: *emphasis*
+
+### Blockquotes
 
 > This is a blockquote.
 > This is the second paragraph in the blockquote.
 
-### JavaScript Highlight
+### JavaScript Highlighting
 
 ```javascript
 function hello(name) {
     console.log('Hello ' + name);
 }
 hello('msee');
+```
+
+### Python Highlighting
+
+```python
+def main():
+    print "Hello World!"
+```
+
+### Haskell Highlighting
+
+```haskell
+data Testing = Testing String
+main = putStrLn "Hello World"
 ```
 
 ### Code Block

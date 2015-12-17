@@ -11,6 +11,8 @@ import           Language.Haskell.HsColour
 import           Language.Haskell.HsColour.Colourise (readColourPrefs)
 import           System.Console.ANSI
 import           System.Console.Terminal.Size        (Window (..), size)
+import           System.Directory
+import           Text.Highlighting.Pygments
 
 prettyPrint :: Doc -> IO ()
 prettyPrint (Doc _ blocks) = do
@@ -60,14 +62,27 @@ prettyPrintBlock wid (Blockquote bs) = forM_ bs $ \b -> do
     putStr "  > "
     setSGR [ SetColor Foreground Vivid Blue ]
     prettyPrintBlock wid b
+prettyPrintBlock _ (CodeBlock (CodeAttr "" _) t) = do
+    setSGR [ SetColor Foreground Dull Yellow ]
+    forM_ (Text.lines t) $ \l -> Text.putStrLn ("    " <> l)
+    setSGR [ Reset ]
 prettyPrintBlock _ (CodeBlock (CodeAttr "haskell" _) t) = do
     prefs <- readColourPrefs
     let code = hscolour TTY prefs False True "" False (Text.unpack t)
     forM_ (lines code) $ \l -> putStrLn ("    " <> l)
-prettyPrintBlock _ (CodeBlock _ t) = do
-    setSGR [ SetColor Foreground Dull Yellow ]
-    forM_ (Text.lines t) $ \l -> Text.putStrLn ("    " <> l)
-    setSGR [ Reset ]
+prettyPrintBlock wid (CodeBlock (CodeAttr lang info) t) = do
+    mlexer <- findLexer
+    case mlexer of
+        Nothing -> prettyPrintBlock wid (CodeBlock (CodeAttr "" info) t)
+        Just lexer -> do
+            highlighted <- highlight lexer terminalFormatter [] (Text.unpack t)
+            forM_ (lines highlighted) $ \l -> putStrLn ("    " <> l)
+  where
+    findLexer = do
+        mpygments <- findExecutable "pygmentize"
+        case mpygments of
+            Nothing -> return Nothing
+            Just _ -> getLexerByName (Text.unpack lang)
 prettyPrintBlock wid HRule = do
     setSGR [ SetColor Foreground Vivid Black ]
     putStr (replicate wid '-')
