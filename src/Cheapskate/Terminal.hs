@@ -121,4 +121,14 @@ prettyPrintInline (Code s) = do
     setSGR [ SetColor Foreground Dull Yellow ]
     Text.putStr s
     setSGR [ Reset ]
+prettyPrintInline (Image _ url tit) = do
+    putStr "!["
+    setSGR [ SetConsoleIntensity BoldIntensity ]
+    Text.putStr tit
+    setSGR [ Reset ]
+    putStr "]("
+    setSGR [ SetColor Foreground Vivid Blue ]
+    Text.putStr url
+    setSGR [ Reset ]
+    putChar ')'
 prettyPrintInline el = print el

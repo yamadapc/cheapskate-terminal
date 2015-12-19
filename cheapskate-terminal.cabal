@@ -10,7 +10,6 @@ maintainer:          tacla.yamada@gmail.com
 copyright:           Copyright (c) 2015 Pedro Tacla Yamada
 category:            Web
 build-type:          Simple
--- extra-source-files:
 cabal-version:       >=1.10
 
 library
@@ -20,7 +19,6 @@ library
                      , base >= 4.7 && < 5
                      , cheapskate
                      , directory
-                     , drawille
                      , hpygments
                      , hscolour
                      , terminal-size
@@ -36,7 +34,6 @@ executable cheapskate-terminal
                      , cheapskate
                      , cheapskate-terminal
                      , directory
-                     , drawille
                      , hpygments
                      , hscolour
                      , terminal-size
@@ -52,7 +49,6 @@ test-suite cheapskate-terminal-test
                      , cheapskate
                      , cheapskate-terminal
                      , directory
-                     , drawille
                      , hpygments
                      , hscolour
                      , terminal-size
