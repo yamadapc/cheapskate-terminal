@@ -9,6 +9,29 @@ battle-tested soon.
 ## Basic highlighting
 ![](/demo.gif)
 
+## Installing
+```
+$ git clone git@github.com:yamadapc/cheapskate-terminal
+$ stack install ./cheapskate-terminal
+```
+
+## Library Usage
+The library exports:
+```haskell
+prettyPrint :: Doc -> IO ()
+```
+
+Example usage:
+```haskell
+import           Cheapskate
+import           Cheapskate.Terminal
+import qualified Data.Text.IO        as Text (readFile)
+
+main = do
+    tc <- Text.readFile "test-file"
+    prettyPrint (markdown def tc)
+```
+
 ## Haskell Source code highlighting
 ![](/demo2.gif)
 
@@ -16,4 +39,4 @@ battle-tested soon.
 ![](/demo3.gif)
 
 ## License
-MIT
+This code is published under the MIT License.
