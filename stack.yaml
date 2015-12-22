@@ -7,11 +7,11 @@ resolver: lts-3.17
 packages:
 - '.'
 - './hpygments'
+- './ansi-terminal-builder'
 
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
 extra-deps:
 - cheapskate-0.1.0.4
-- drawille-0.1.0.5
 
 # Override default flag values for local packages and extra-deps
 flags: {}

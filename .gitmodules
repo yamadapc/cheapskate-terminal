@@ -1,3 +1,6 @@
 [submodule "hpygments"]
 	path = hpygments
 	url = git@github.com:yamadapc/hpygments
+[submodule "ansi-terminal-builder"]
+	path = ansi-terminal-builder
+	url = git://github.com/yamadapc/ansi-terminal-builder.git

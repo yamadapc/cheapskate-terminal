@@ -16,8 +16,10 @@ library
   hs-source-dirs:      src
   exposed-modules:     Cheapskate.Terminal
   build-depends:       ansi-terminal >= 0.6.2.3
+                     , ansi-terminal-builder
                      , base >= 4.7 && < 5
                      , cheapskate
+                     , containers
                      , directory
                      , hpygments
                      , hscolour
@@ -30,9 +32,11 @@ executable cheapskate-terminal
   main-is:             Main.hs
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N -O2
   build-depends:       ansi-terminal >= 0.6.2.3
+                     , ansi-terminal-builder
                      , base
                      , cheapskate
                      , cheapskate-terminal
+                     , containers
                      , directory
                      , hpygments
                      , hscolour
@@ -45,9 +49,11 @@ test-suite cheapskate-terminal-test
   hs-source-dirs:      test
   main-is:             Spec.hs
   build-depends:       ansi-terminal >= 0.6.2.3
+                     , ansi-terminal-builder
                      , base
                      , cheapskate
                      , cheapskate-terminal
+                     , containers
                      , directory
                      , hpygments
                      , hscolour
