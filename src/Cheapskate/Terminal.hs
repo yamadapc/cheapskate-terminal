@@ -2,6 +2,21 @@
 {-# LANGUAGE OverloadedStrings         #-}
 {-# LANGUAGE RecordWildCards           #-}
 module Cheapskate.Terminal
+    ( -- * Rendering markdown to the terminal
+      prettyPrint
+    , renderTerminal
+    , renderIO
+      -- * Options
+    , PrettyPrintOptions(..)
+    , def
+    , renderIOWith
+      -- * Pure rendering
+    , renderPureWith
+      -- * Internal functions and implementation comments
+    , renderBlock
+    , renderBlockPure
+    , renderInline
+    )
   where
 
 import           Cheapskate
@@ -25,6 +40,8 @@ import           System.Console.Terminal.Size        (Window (..), size)
 import           System.Directory
 import           Text.Highlighting.Pygments
 
+-- |
+-- An alias for 'renderTerminal'
 data PrettyPrintOptions = PrettyPrintOptions { prettyPrintWidth       :: Int64
                                              , prettyPrintColourPrefs :: ColourPrefs
                                              , prettyPrintHasPygments :: Bool
@@ -36,14 +53,20 @@ instance Default PrettyPrintOptions where
                              , prettyPrintHasPygments = False
                              }
 
+-- |
+-- An alias for 'renderTerminal'
 prettyPrint :: Doc -> IO ()
 prettyPrint = renderTerminal
 
+-- |
+-- Prints a markdown document to the terminal
 renderTerminal :: Doc -> IO ()
 renderTerminal doc = do
     b <- renderIO doc
     mapM_ Text.Lazy.putStrLn (Text.Lazy.lines b)
 
+-- |
+-- Renders a 'Doc' doing 'IO' reading options from the environment
 renderIO :: Doc -> IO Text.Lazy.Text
 renderIO doc = do
     wid <- size >>= \s -> case s of
@@ -57,6 +80,8 @@ renderIO doc = do
                                   }
     renderIOWith opts doc
 
+-- |
+-- Renders a 'Doc' doing 'IO' with some set of options
 renderIOWith :: PrettyPrintOptions -> Doc -> IO Text.Lazy.Text
 renderIOWith opts (Doc _ blocks) = toLazyText <$> foldM helper "\n" blocks
   where
@@ -64,9 +89,16 @@ renderIOWith opts (Doc _ blocks) = toLazyText <$> foldM helper "\n" blocks
         t <- renderBlock opts block
         return (m <> fromLazyText t <> "\n")
 
-concats :: (IsString a, Monoid a) => [a] -> [a]
-concats = scanl1 (\s v -> s <> " " <> v)
+-- |
+-- Renders a 'Doc' without doing 'IO'
+renderPureWith :: PrettyPrintOptions -> Doc -> Text.Lazy.Text
+renderPureWith opts (Doc _ blocks) = toLazyText (foldl helper "" blocks)
+  where
+    helper m block = let t = renderBlockPure opts block
+                     in m <> fromLazyText t <> "\n"
 
+-- |
+-- Renders a 'Block' doing 'IO'; this is necessary for @pygments@ usage.
 renderBlock :: PrettyPrintOptions -> Block -> IO Text.Lazy.Text
 renderBlock opts@PrettyPrintOptions{..} b@(CodeBlock (CodeAttr lang _) t)
     | lang /= "haskell" && prettyPrintHasPygments = do
@@ -80,6 +112,11 @@ renderBlock opts@PrettyPrintOptions{..} b@(CodeBlock (CodeAttr lang _) t)
                                        (lines highlighted)
 renderBlock opts block = return (renderBlockPure opts block)
 
+-- |
+-- Renders a 'Block' without doing 'IO'. Uses a 'Text.Lazy.Text' so wrapping is
+-- easier to implement. The absolute majority of the time is spent going from
+-- 'Text.Lazy.Text' to 'Builder' and back. If we strip out 'Builder' we gain
+-- complexity like crazy. Suggestions welcome.
 renderBlockPure :: PrettyPrintOptions -> Block -> Text.Lazy.Text
 renderBlockPure opts@PrettyPrintOptions{..} block = case block of
     (Header level els) ->
@@ -130,6 +167,8 @@ renderBlockPure opts@PrettyPrintOptions{..} block = case block of
         setSGRCodeText [ Reset ]
     (HtmlBlock html) -> Text.Lazy.fromStrict html <> "\n"
 
+-- |
+-- Renders an inline to a 'Text' 'Builder'
 renderInline :: Inline -> Builder
 renderInline el = case el of
     LineBreak -> "\n"
@@ -173,6 +212,9 @@ renderInline el = case el of
     renderInlinesWith sgr = mconcatMapF helper
       where
         helper e = setSGRCodeBuilder sgr <> renderInline e
+
+concats :: (IsString a, Monoid a) => [a] -> [a]
+concats = scanl1 (\s v -> s <> " " <> v)
 
 wordwrap :: Int64 -> Text.Lazy.Text -> Text.Lazy.Text
 wordwrap maxwidth = Text.Lazy.unlines . wordwrap' . Text.Lazy.words
