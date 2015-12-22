@@ -18,6 +18,7 @@ library
   build-depends:       ansi-terminal >= 0.6.2.3
                      , base >= 4.7 && < 5
                      , cheapskate
+                     , data-default >= 0.5.3
                      , directory
                      , hpygments
                      , hscolour
@@ -33,6 +34,7 @@ executable cheapskate-terminal
                      , base
                      , cheapskate
                      , cheapskate-terminal
+                     , data-default >= 0.5.3
                      , directory
                      , hpygments
                      , hscolour
@@ -48,6 +50,7 @@ test-suite cheapskate-terminal-test
                      , base
                      , cheapskate
                      , cheapskate-terminal
+                     , data-default >= 0.5.3
                      , directory
                      , hpygments
                      , hscolour

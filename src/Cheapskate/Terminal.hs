@@ -1,134 +1,204 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE OverloadedStrings         #-}
+{-# LANGUAGE RecordWildCards           #-}
 module Cheapskate.Terminal
   where
 
 import           Cheapskate
-import           Control.Monad                       (forM_)
+import           Control.Monad                       (foldM)
+import           Data.Default
+import           Data.Foldable                       (toList)
+import           Data.Maybe                          (isJust)
 import           Data.Monoid
-import qualified Data.Text                           as Text
-import qualified Data.Text.IO                        as Text
+import           Data.String                         (IsString)
+import qualified Data.Text                           as Text (Text, lines, pack,
+                                                              unpack)
+import qualified Data.Text.Lazy                      as Text.Lazy
+import           Data.Text.Lazy.Builder              (Builder, fromString,
+                                                      fromText, toLazyText)
+import qualified Data.Text.Lazy.IO                   as Text.Lazy
+import           GHC.Int
 import           Language.Haskell.HsColour
-import           Language.Haskell.HsColour.Colourise (readColourPrefs)
+import           Language.Haskell.HsColour.Colourise (defaultColourPrefs,
+                                                      readColourPrefs)
 import           System.Console.ANSI
 import           System.Console.Terminal.Size        (Window (..), size)
 import           System.Directory
 import           Text.Highlighting.Pygments
 
+data PrettyPrintOptions = PrettyPrintOptions { prettyPrintWidth       :: Int64
+                                             , prettyPrintColourPrefs :: ColourPrefs
+                                             , prettyPrintHasPygments :: Bool
+                                             }
+
+instance Default PrettyPrintOptions where
+    def = PrettyPrintOptions { prettyPrintColourPrefs = defaultColourPrefs
+                             , prettyPrintWidth = 80
+                             , prettyPrintHasPygments = False
+                             }
+
 prettyPrint :: Doc -> IO ()
-prettyPrint (Doc _ blocks) = do
-    putStrLn ""
+prettyPrint = renderTerminal
+
+renderTerminal :: Doc -> IO ()
+renderTerminal doc = do
+    b <- renderIO doc
+    mapM_ Text.Lazy.putStrLn (Text.Lazy.lines b)
+
+renderIO :: Doc -> IO Text.Lazy.Text
+renderIO (Doc _ blocks) = do
     wid <- size >>= \s -> case s of
         Just (Window _ w) -> return w
         Nothing -> return 80
-    forM_ blocks $ \block -> do
-        prettyPrintBlock wid block
-        putStrLn ""
+    prefs <- readColourPrefs
+    hasPygments <- isJust <$> findExecutable "pygments"
+    let opts = PrettyPrintOptions { prettyPrintWidth = wid
+                                  , prettyPrintHasPygments = hasPygments
+                                  , prettyPrintColourPrefs = prefs
+                                  }
+    foldM (helper opts) "\n" blocks
+  where
+    helper opts m block = do
+        t <- renderBlock opts block
+        return (m <> t <> "\n")
 
-prettyPrintBlock :: Int -> Block -> IO ()
-prettyPrintBlock _ (Header level els) = do
-    setSGR [ SetColor Foreground Vivid Black
-           , SetConsoleIntensity BoldIntensity
-           ]
-    putStr (replicate level '#')
-    putStr " "
-    setSGR [ Reset ]
-    setSGR [ SetColor Foreground Vivid Cyan
-           , SetConsoleIntensity BoldIntensity
-           ]
-    mapM_ prettyPrintInline els
-    setSGR [ Reset ]
-    putStrLn ""
-prettyPrintBlock _ (Para els) = do
-    mapM_ prettyPrintInline els
-    putStrLn ""
-prettyPrintBlock wid (List _ (Bullet c) bss) = forM_ bss $ \bs -> do
-    setSGR [ SetColor Foreground Vivid Black ]
-    putStr ("  " ++ (c:" "))
-    setSGR [ Reset ]
-    mapM_ (prettyPrintBlock wid) bs
-prettyPrintBlock wid (List _ (Numbered w i) bss) =
-    forM_ ibss $ \(bs, j) -> do
-        setSGR [ SetColor Foreground Vivid Black ]
+renderIOWith :: PrettyPrintOptions -> Doc -> IO Text.Lazy.Text
+renderIOWith opts (Doc _ blocks) = foldM helper "\n" blocks
+  where
+    helper m block = do
+        t <- renderBlock opts block
+        return (m <> t <> "\n")
+
+concats :: (IsString a, Monoid a) => [a] -> [a]
+concats = scanl1 (\s v -> s <> " " <> v)
+
+renderBlock :: PrettyPrintOptions -> Block -> IO Text.Lazy.Text
+renderBlock opts@PrettyPrintOptions{..} b@(CodeBlock (CodeAttr lang _) t)
+    | lang /= "haskell" && prettyPrintHasPygments = do
+          mlexer <- getLexerByName (Text.unpack lang)
+          case mlexer of
+              Nothing -> return (renderBlockPure opts b)
+              Just lexer -> do
+                  let st = Text.unpack t
+                  highlighted <- highlight lexer terminalFormatter [] st
+                  return $ mconcatMapF ((<> "\n") . ("    " <>) . Text.Lazy.pack)
+                                       (lines highlighted)
+renderBlock opts block = return (renderBlockPure opts block)
+
+renderBlockPure :: PrettyPrintOptions -> Block -> Text.Lazy.Text
+renderBlockPure opts@PrettyPrintOptions{..} block = case block of
+    (Header level els) ->
+        setSGRCodeText [ SetColor Foreground Vivid Black
+                    , SetConsoleIntensity BoldIntensity
+                    ] <>
+        Text.Lazy.replicate (fromIntegral level) "#" <> " " <>
+        setSGRCodeText [ Reset ] <>
+        setSGRCodeText [ SetColor Foreground Vivid Cyan
+                    , SetConsoleIntensity BoldIntensity
+                    ] <>
+        toLazyText (mconcatMapF renderInline els) <>
+        setSGRCodeText [ Reset ] <>
+        "\n"
+    (Para els) ->
+        wordwrap prettyPrintWidth (toLazyText (mconcatMapF renderInline els))
+    (List _ (Bullet c) bss) -> flip mconcatMapF bss $
+        \bs -> setSGRCodeText [ SetColor Foreground Vivid Black ] <>
+               Text.Lazy.pack ("  " ++ (c:" ")) <>
+               setSGRCodeText [ Reset ] <>
+               mconcatMapF (renderBlockPure opts) bs
+    (List _ (Numbered w i) bss) ->
+        let ibss = zip bss [0..]
+        in flip mconcatMapF ibss $ \(bs, j) ->
+        setSGRCodeText [ SetColor Foreground Vivid Black ] <>
         let wc = case w of
                 PeriodFollowing -> '.'
                 ParenFollowing -> ')'
-        putStr ("  " ++ show (i + j) ++ (wc : " "))
-        setSGR [ Reset ]
-        mapM_ (prettyPrintBlock wid) bs
-  where
-    ibss = zip bss [0..]
-prettyPrintBlock wid (Blockquote bs) = forM_ bs $ \b -> do
-    setSGR [ SetColor Foreground Vivid Black ]
-    putStr "  > "
-    setSGR [ SetColor Foreground Vivid Blue ]
-    prettyPrintBlock wid b
-prettyPrintBlock _ (CodeBlock (CodeAttr "" _) t) = do
-    setSGR [ SetColor Foreground Dull Yellow ]
-    forM_ (Text.lines t) $ \l -> Text.putStrLn ("    " <> l)
-    setSGR [ Reset ]
-prettyPrintBlock _ (CodeBlock (CodeAttr "haskell" _) t) = do
-    prefs <- readColourPrefs
-    let code = hscolour TTY prefs False True "" False (Text.unpack t)
-    forM_ (lines code) $ \l -> putStrLn ("    " <> l)
-prettyPrintBlock wid (CodeBlock (CodeAttr lang info) t) = do
-    mlexer <- findLexer
-    case mlexer of
-        Nothing -> prettyPrintBlock wid (CodeBlock (CodeAttr "" info) t)
-        Just lexer -> do
-            highlighted <- highlight lexer terminalFormatter [] (Text.unpack t)
-            forM_ (lines highlighted) $ \l -> putStrLn ("    " <> l)
-  where
-    findLexer = do
-        mpygments <- findExecutable "pygmentize"
-        case mpygments of
-            Nothing -> return Nothing
-            Just _ -> getLexerByName (Text.unpack lang)
-prettyPrintBlock wid HRule = do
-    setSGR [ SetColor Foreground Vivid Black ]
-    putStr (replicate wid '-')
-    setSGR [ Reset ]
-prettyPrintBlock _ (HtmlBlock html) = Text.putStrLn html
+         in Text.Lazy.pack ("  " ++ show (i + j) ++ (wc : " ")) <>
+        setSGRCodeText [ Reset ] <>
+        mconcatMapF (renderBlockPure opts) bs
+    (Blockquote bs) -> flip mconcatMapF bs $ \b ->
+        setSGRCodeText [ SetColor Foreground Vivid Black ] <>
+        "  > " <>
+        setSGRCodeText [ SetColor Foreground Vivid Blue ] <>
+        renderBlockPure opts b
+    (CodeBlock (CodeAttr "haskell" _) t) ->
+        let code = hscolour
+                TTY prettyPrintColourPrefs False True "" False (Text.unpack t)
+        in toLazyText (mconcatMapF ((<> "\n") . ("    " <>) . fromString) (lines code))
+    (CodeBlock (CodeAttr _ _) t) ->
+        setSGRCodeText [ SetColor Foreground Dull Yellow ] <>
+        mconcat (map (Text.Lazy.fromStrict . (<> "\n") . ("    " <>) ) (Text.lines t)) <>
+        setSGRCodeText [ Reset ]
+    HRule ->
+        setSGRCodeText [ SetColor Foreground Vivid Black ] <>
+        Text.Lazy.replicate (fromIntegral prettyPrintWidth) "-" <>
+        setSGRCodeText [ Reset ]
+    (HtmlBlock html) -> Text.Lazy.fromStrict html <> "\n"
 
-prettyPrintInline :: Inline -> IO ()
-prettyPrintInline (Str s) = Text.putStr s
-prettyPrintInline (Link els url _) = do
-    putChar '['
-    forM_ els $ \el -> do
-        setSGR [ SetConsoleIntensity BoldIntensity ]
-        prettyPrintInline el
-    setSGR [ Reset ]
-    putChar ']'
-    putChar '('
-    setSGR [ SetColor Foreground Vivid Blue ]
-    Text.putStr url
-    setSGR [ Reset ]
-    putChar ')'
-prettyPrintInline Space = putStr " "
-prettyPrintInline SoftBreak = putStr " "
-prettyPrintInline (Emph els) = do
-    forM_ els $ \el -> do
-        setSGR [ SetItalicized True
-               , SetUnderlining SingleUnderline
-               ]
-        prettyPrintInline el
-    setSGR [ Reset ]
-prettyPrintInline (Strong els) = do
-    forM_ els $ \el -> do
-        setSGR [ SetConsoleIntensity BoldIntensity ]
-        prettyPrintInline el
-    setSGR [ Reset ]
-prettyPrintInline (Code s) = do
-    setSGR [ SetColor Foreground Dull Yellow ]
-    Text.putStr s
-    setSGR [ Reset ]
-prettyPrintInline (Image _ url tit) = do
-    putStr "!["
-    setSGR [ SetConsoleIntensity BoldIntensity ]
-    Text.putStr tit
-    setSGR [ Reset ]
-    putStr "]("
-    setSGR [ SetColor Foreground Vivid Blue ]
-    Text.putStr url
-    setSGR [ Reset ]
-    putChar ')'
-prettyPrintInline el = print el
+renderInline :: Inline -> Builder
+renderInline el = case el of
+    LineBreak -> "\n"
+    Space -> " "
+    SoftBreak -> " "
+    Entity t -> fromText t
+    RawHtml t -> fromText t
+    (Str s) -> fromText s
+    (Link els url _) ->
+        "[" <>
+        renderInlinesWith [ SetConsoleIntensity BoldIntensity ] els <>
+        setSGRCodeBuilder [ Reset ] <>
+        "](" <>
+        setSGRCodeBuilder [ SetColor Foreground Vivid Blue ] <>
+        fromText url <>
+        setSGRCodeBuilder [ Reset ] <>
+        ")"
+    (Emph els) ->
+        renderInlinesWith [ SetItalicized True
+                               , SetUnderlining SingleUnderline
+                               ] els <>
+        setSGRCodeBuilder [ Reset ]
+    (Strong els) ->
+        renderInlinesWith [ SetConsoleIntensity BoldIntensity ] els <>
+        setSGRCodeBuilder [ Reset ]
+    (Code s) ->
+        setSGRCodeBuilder [ SetColor Foreground Dull Yellow ] <>
+        fromText s <>
+        setSGRCodeBuilder [ Reset ]
+    (Image _ url tit) ->
+        "![" <>
+        setSGRCodeBuilder [ SetConsoleIntensity BoldIntensity ] <>
+        fromText tit <>
+        setSGRCodeBuilder [ Reset ] <>
+        "](" <>
+        setSGRCodeBuilder [ SetColor Foreground Vivid Blue ] <>
+        fromText url <>
+        setSGRCodeBuilder [ Reset ] <>
+        ")"
+  where
+    renderInlinesWith sgr = mconcatMapF helper
+      where
+        helper e = setSGRCodeBuilder sgr <> renderInline e
+
+wordwrap :: Int64 -> Text.Lazy.Text -> Text.Lazy.Text
+wordwrap maxwidth = Text.Lazy.unlines . wordwrap' . Text.Lazy.words
+  where
+    wordwrap' [] = []
+    wordwrap' ws = sentence : wordwrap' restwords
+      where
+        zipped = zip (concats ws) ws
+        (sentences, rest) = span (\(s, _) -> Text.Lazy.length s <= maxwidth) zipped
+        sentence = last (map fst sentences)
+        restwords = map snd rest
+
+setSGRCodeText :: [SGR] -> Text.Lazy.Text
+setSGRCodeText = Text.Lazy.pack . setSGRCode
+
+setSGRCodeTextS :: [SGR] -> Text.Text
+setSGRCodeTextS = Text.pack . setSGRCode
+
+setSGRCodeBuilder :: [SGR] -> Builder
+setSGRCodeBuilder = fromText . setSGRCodeTextS
+
+-- Probably there's a function in prelude that we don't know that does this
+mconcatMapF :: (Foldable f, Monoid m) => (a -> m) -> f a -> m
+mconcatMapF f = mconcat . map f . toList
