@@ -14,8 +14,7 @@ import           Data.String                         (IsString)
 import qualified Data.Text                           as Text (Text, lines, pack,
                                                               unpack)
 import qualified Data.Text.Lazy                      as Text.Lazy
-import           Data.Text.Lazy.Builder              (Builder, fromString,
-                                                      fromText, toLazyText)
+import           Data.Text.Lazy.Builder
 import qualified Data.Text.Lazy.IO                   as Text.Lazy
 import           GHC.Int
 import           Language.Haskell.HsColour
@@ -46,7 +45,7 @@ renderTerminal doc = do
     mapM_ Text.Lazy.putStrLn (Text.Lazy.lines b)
 
 renderIO :: Doc -> IO Text.Lazy.Text
-renderIO (Doc _ blocks) = do
+renderIO doc = do
     wid <- size >>= \s -> case s of
         Just (Window _ w) -> return w
         Nothing -> return 80
@@ -56,18 +55,14 @@ renderIO (Doc _ blocks) = do
                                   , prettyPrintHasPygments = hasPygments
                                   , prettyPrintColourPrefs = prefs
                                   }
-    foldM (helper opts) "\n" blocks
-  where
-    helper opts m block = do
-        t <- renderBlock opts block
-        return (m <> t <> "\n")
+    renderIOWith opts doc
 
 renderIOWith :: PrettyPrintOptions -> Doc -> IO Text.Lazy.Text
-renderIOWith opts (Doc _ blocks) = foldM helper "\n" blocks
+renderIOWith opts (Doc _ blocks) = toLazyText <$> foldM helper "\n" blocks
   where
     helper m block = do
         t <- renderBlock opts block
-        return (m <> t <> "\n")
+        return (m <> fromLazyText t <> "\n")
 
 concats :: (IsString a, Monoid a) => [a] -> [a]
 concats = scanl1 (\s v -> s <> " " <> v)
@@ -94,8 +89,8 @@ renderBlockPure opts@PrettyPrintOptions{..} block = case block of
         Text.Lazy.replicate (fromIntegral level) "#" <> " " <>
         setSGRCodeText [ Reset ] <>
         setSGRCodeText [ SetColor Foreground Vivid Cyan
-                    , SetConsoleIntensity BoldIntensity
-                    ] <>
+                       , SetConsoleIntensity BoldIntensity
+                       ] <>
         toLazyText (mconcatMapF renderInline els) <>
         setSGRCodeText [ Reset ] <>
         "\n"
