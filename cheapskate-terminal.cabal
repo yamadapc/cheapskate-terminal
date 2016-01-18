@@ -20,7 +20,7 @@ library
                      , cheapskate
                      , data-default >= 0.5.3
                      , directory
-                     , hpygments
+                     , hpygments >= 0.2
                      , hscolour
                      , terminal-size
                      , text
@@ -36,7 +36,7 @@ executable cheapskate-terminal
                      , cheapskate-terminal
                      , data-default >= 0.5.3
                      , directory
-                     , hpygments
+                     , hpygments >= 0.2
                      , hscolour
                      , terminal-size
                      , text
@@ -52,7 +52,7 @@ test-suite cheapskate-terminal-test
                      , cheapskate-terminal
                      , data-default >= 0.5.3
                      , directory
-                     , hpygments
+                     , hpygments >= 0.2
                      , hscolour
                      , terminal-size
                      , text
