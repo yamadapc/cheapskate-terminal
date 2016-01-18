@@ -8,8 +8,7 @@ doing so.
 
 ## Installing
 ```
-$ git clone git@github.com:yamadapc/cheapskate-terminal
-$ stack install ./cheapskate-terminal
+$ stack install cheapskate-terminal
 ```
 
 ## Library Usage
